@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Game QA Dashboard</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #22263a;
+    --border: #2e3350;
+    --text: #e2e8f0;
+    --muted: #8892a4;
+    --accent: #6366f1;
+    --critical: #ef4444;
+    --high: #f97316;
+    --medium: #eab308;
+    --low: #22c55e;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; }
+
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 24px;
+    display: flex; align-items: center; gap: 16px;
+  }
+  header h1 { font-size: 1.2rem; font-weight: 700; color: var(--accent); }
+  .badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px;
+            border-radius: 999px; font-size: 0.75rem; font-weight: 600; }
+  .badge-running { background: #14532d; color: #4ade80; }
+  .badge-idle    { background: #1e293b; color: var(--muted); }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); gap: 12px;
+          padding: 20px 24px 0; }
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+               padding: 14px 18px; }
+  .stat-card .label { font-size: 0.75rem; color: var(--muted); text-transform: uppercase;
+                       letter-spacing: .06em; margin-bottom: 4px; }
+  .stat-card .value { font-size: 1.8rem; font-weight: 700; }
+
+  .main { display: grid; grid-template-columns: 1fr 340px; gap: 16px; padding: 20px 24px; }
+
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+           overflow: hidden; }
+  .panel-header { padding: 12px 18px; border-bottom: 1px solid var(--border);
+                  font-weight: 600; font-size: 0.9rem; display: flex;
+                  justify-content: space-between; align-items: center; }
+  .panel-body { overflow-y: auto; max-height: 500px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  th { padding: 9px 14px; text-align: left; color: var(--muted); font-weight: 500;
+       border-bottom: 1px solid var(--border); position: sticky; top: 0;
+       background: var(--surface); }
+  td { padding: 9px 14px; border-bottom: 1px solid var(--border); }
+  tr:hover td { background: var(--surface2); cursor: pointer; }
+
+  .sev { padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600; }
+  .sev-critical { background: #450a0a; color: var(--critical); }
+  .sev-high     { background: #431407; color: var(--high); }
+  .sev-medium   { background: #422006; color: var(--medium); }
+  .sev-low      { background: #052e16; color: var(--low); }
+
+  .type-tag { background: var(--surface2); border: 1px solid var(--border);
+              padding: 2px 6px; border-radius: 4px; font-size: 0.72rem; color: var(--muted); }
+
+  /* Right sidebar */
+  .sidebar { display: flex; flex-direction: column; gap: 14px; }
+
+  .bar-chart { padding: 14px 18px; }
+  .bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 0.82rem; }
+  .bar-label { width: 80px; color: var(--muted); }
+  .bar-track { flex: 1; height: 10px; background: var(--surface2); border-radius: 5px; overflow: hidden; }
+  .bar-fill  { height: 100%; border-radius: 5px; transition: width 0.4s; }
+  .bar-count { width: 28px; text-align: right; font-weight: 600; }
+
+  /* Log panel */
+  .log-list { padding: 12px 18px; font-size: 0.78rem; font-family: monospace; }
+  .log-entry { padding: 4px 0; border-bottom: 1px solid var(--border); color: var(--muted);
+               white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .log-entry.error { color: var(--critical); }
+  .log-entry.warn  { color: var(--medium); }
+
+  /* Modal */
+  .modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.75);
+              z-index: 100; align-items: center; justify-content: center; }
+  .modal-bg.open { display: flex; }
+  .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+           max-width: 900px; width: 95vw; max-height: 90vh; overflow-y: auto; padding: 24px; }
+  .modal h2 { font-size: 1rem; margin-bottom: 16px; }
+  .modal img { max-width: 100%; border-radius: 6px; border: 1px solid var(--border); }
+  .modal-close { float: right; cursor: pointer; font-size: 1.3rem; color: var(--muted); }
+  .detail-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; font-size: 0.82rem; }
+  .detail-row .key { color: var(--muted); }
+  pre { background: var(--surface2); padding: 10px; border-radius: 6px; font-size: 0.78rem;
+        overflow-x: auto; color: var(--muted); margin-top: 10px; }
+
+  .empty { padding: 40px; text-align: center; color: var(--muted); font-size: 0.9rem; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>⚡ Game QA Dashboard</h1>
+  <span id="status-badge" class="badge badge-idle">● Idle</span>
+  <span style="margin-left:auto; color:var(--muted); font-size:0.8rem;" id="last-update"></span>
+</header>
+
+<!-- Stat cards -->
+<div class="grid" id="stats-grid">
+  <div class="stat-card"><div class="label">Episode</div><div class="value" id="s-episode">—</div></div>
+  <div class="stat-card"><div class="label">Step</div><div class="value" id="s-step">—</div></div>
+  <div class="stat-card"><div class="label">Score</div><div class="value" id="s-score">—</div></div>
+  <div class="stat-card"><div class="label">ε (Explore)</div><div class="value" id="s-epsilon">—</div></div>
+  <div class="stat-card"><div class="label">Coverage</div><div class="value" id="s-coverage">—</div></div>
+  <div class="stat-card"><div class="label">Bugs Found</div><div class="value" id="s-bugs" style="color:var(--critical)">—</div></div>
+  <div class="stat-card"><div class="label">JS Errors</div><div class="value" id="s-jserrors">—</div></div>
+  <div class="stat-card"><div class="label">Hitches</div><div class="value" id="s-hitches">—</div></div>
+</div>
+
+<!-- Main layout -->
+<div class="main">
+
+  <!-- Bug table -->
+  <div class="panel">
+    <div class="panel-header">
+      Detected Bugs
+      <button onclick="loadBugs()" style="background:var(--accent);border:none;color:#fff;padding:4px 12px;border-radius:6px;cursor:pointer;font-size:0.8rem;">Refresh</button>
+    </div>
+    <div class="panel-body">
+      <table id="bug-table">
+        <thead>
+          <tr>
+            <th>#</th><th>Type</th><th>Severity</th><th>Score</th><th>Description</th><th>Ep/Step</th>
+          </tr>
+        </thead>
+        <tbody id="bug-tbody">
+          <tr><td colspan="6" class="empty">No bugs detected yet. Run the QA agent to start.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Sidebar -->
+  <div class="sidebar">
+
+    <!-- Severity chart -->
+    <div class="panel">
+      <div class="panel-header">Severity Breakdown</div>
+      <div class="bar-chart" id="sev-chart">
+        <div class="empty" style="padding:20px">No data yet</div>
+      </div>
+    </div>
+
+    <!-- Log clusters -->
+    <div class="panel">
+      <div class="panel-header">Log Analysis</div>
+      <div class="log-list" id="log-panel">
+        <div class="empty" style="padding:20px">No logs yet</div>
+      </div>
+    </div>
+
+    <!-- Perf -->
+    <div class="panel">
+      <div class="panel-header">Performance</div>
+      <div class="bar-chart" id="perf-panel">
+        <div class="empty" style="padding:20px">No data yet</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Bug detail modal -->
+<div class="modal-bg" id="modal">
+  <div class="modal">
+    <span class="modal-close" onclick="closeModal()">✕</span>
+    <h2 id="modal-title">Bug Detail</h2>
+    <div id="modal-content"></div>
+  </div>
+</div>
+
+<script>
+const SEV_COLORS = { critical:'#ef4444', high:'#f97316', medium:'#eab308', low:'#22c55e' };
+let allBugs = [];
+
+async function loadState() {
+  try {
+    const r = await fetch('/api/state');
+    const d = await r.json();
+
+    document.getElementById('s-episode').textContent = d.episode ?? '—';
+    document.getElementById('s-step').textContent = d.step ?? '—';
+    document.getElementById('s-score').textContent = d.score ?? '—';
+    document.getElementById('s-epsilon').textContent = d.epsilon != null ? d.epsilon.toFixed(3) : '—';
+    document.getElementById('s-coverage').textContent = d.coverage ?? '—';
+    document.getElementById('s-jserrors').textContent = d.js_errors ?? '—';
+    document.getElementById('s-hitches').textContent = d.hitches ?? '—';
+
+    const badge = document.getElementById('status-badge');
+    if (d.status === 'running') {
+      badge.className = 'badge badge-running'; badge.textContent = '● Running';
+    } else {
+      badge.className = 'badge badge-idle'; badge.textContent = '● ' + (d.status || 'Idle');
+    }
+
+    document.getElementById('last-update').textContent = 'Updated ' + new Date().toLocaleTimeString();
+
+    // Perf panel
+    const perf = d.perf_summary || {};
+    if (perf.frames) {
+      document.getElementById('perf-panel').innerHTML = `
+        <div class="bar-row"><span class="bar-label">Frames</span><span>${perf.frames}</span></div>
+        <div class="bar-row"><span class="bar-label">Avg FT</span><span>${(perf.avg_frame_ms||0).toFixed(1)} ms</span></div>
+        <div class="bar-row"><span class="bar-label">Max FT</span><span>${(perf.max_frame_ms||0).toFixed(1)} ms</span></div>
+        <div class="bar-row"><span class="bar-label">Hitches</span><span style="color:var(--high)">${perf.hitches||0}</span></div>
+      `;
+    }
+
+    // Log panel
+    const log = d.log_analysis || {};
+    if (log.top_errors && log.top_errors.length) {
+      const rows = log.top_errors.slice(0,8).map(e =>
+        `<div class="log-entry error">[${e.category}] ${e.text.slice(0,100)}</div>`
+      ).join('');
+      document.getElementById('log-panel').innerHTML = rows ||
+        '<div class="empty" style="padding:20px">No errors</div>';
+    }
+
+  } catch(e) { console.warn('State fetch failed', e); }
+}
+
+async function loadBugs() {
+  try {
+    const r = await fetch('/api/bugs?limit=100');
+    allBugs = await r.json();
+
+    document.getElementById('s-bugs').textContent = allBugs.length;
+
+    renderBugTable(allBugs);
+    renderSevChart(allBugs);
+  } catch(e) { console.warn('Bugs fetch failed', e); }
+}
+
+function renderBugTable(bugs) {
+  const tbody = document.getElementById('bug-tbody');
+  if (!bugs.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="empty">No bugs detected yet. Run the QA agent to start.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = bugs.map((b, i) => `
+    <tr onclick="showBug('${b.id}')">
+      <td>${i+1}</td>
+      <td><span class="type-tag">${b.type}</span></td>
+      <td><span class="sev sev-${b.severity}">${b.severity}</span></td>
+      <td>${b.score.toFixed(1)}</td>
+      <td>${b.description.slice(0,60)}${b.description.length>60?'…':''}</td>
+      <td>${b.episode}/${b.step}</td>
+    </tr>
+  `).join('');
+}
+
+function renderSevChart(bugs) {
+  const counts = { critical:0, high:0, medium:0, low:0 };
+  bugs.forEach(b => { if (counts[b.severity] !== undefined) counts[b.severity]++; });
+  const max = Math.max(...Object.values(counts), 1);
+  document.getElementById('sev-chart').innerHTML = Object.entries(counts).map(([sev, cnt]) => `
+    <div class="bar-row">
+      <span class="bar-label">${sev}</span>
+      <div class="bar-track"><div class="bar-fill" style="width:${cnt/max*100}%;background:${SEV_COLORS[sev]}"></div></div>
+      <span class="bar-count">${cnt}</span>
+    </div>
+  `).join('');
+}
+
+async function showBug(id) {
+  const bug = allBugs.find(b => b.id === id);
+  if (!bug) return;
+
+  const [ssRes, reconRes] = await Promise.all([
+    fetch(`/api/bugs/${id}/screenshot`).then(r=>r.json()),
+    fetch(`/api/bugs/${id}/reconstruction`).then(r=>r.json()),
+  ]);
+
+  let html = `
+    <div class="detail-row">
+      <span class="key">Type:</span> <span class="type-tag">${bug.type}</span>
+      <span class="key">Severity:</span> <span class="sev sev-${bug.severity}">${bug.severity}</span>
+      <span class="key">Score:</span> ${bug.score.toFixed(2)}
+      <span class="key">Episode:</span> ${bug.episode} / Step: ${bug.step}
+    </div>
+    <p style="color:var(--muted);font-size:.85rem;margin-bottom:12px">${bug.description}</p>
+  `;
+
+  if (ssRes.data) html += `<p style="font-size:.8rem;color:var(--muted);margin-bottom:4px">Screenshot</p><img src="${ssRes.data}">`;
+  if (reconRes.data) html += `<p style="font-size:.8rem;color:var(--muted);margin:10px 0 4px">Original | Reconstruction | Diff (×5)</p><img src="${reconRes.data}">`;
+
+  document.getElementById('modal-title').textContent = `Bug ${id} — ${bug.type}`;
+  document.getElementById('modal-content').innerHTML = html;
+  document.getElementById('modal').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('modal').classList.remove('open');
+}
+document.getElementById('modal').addEventListener('click', e => {
+  if (e.target.id === 'modal') closeModal();
+});
+
+// Poll every 3 seconds
+(async function loop() {
+  await loadState();
+  await loadBugs();
+  setTimeout(loop, 3000);
+})();
+</script>
+</body>
+</html>

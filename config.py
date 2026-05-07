@@ -1,0 +1,38 @@
+from pathlib import Path
+
+ROOT = Path(__file__).parent
+
+DATA_DIR = ROOT / "data"
+FRAMES_DIR = DATA_DIR / "frames"
+BUGS_DIR = DATA_DIR / "bugs"
+LOGS_DIR = DATA_DIR / "logs"
+MODEL_DIR = ROOT / "models"
+
+for d in [FRAMES_DIR, BUGS_DIR, LOGS_DIR, MODEL_DIR]:
+    d.mkdir(parents=True, exist_ok=True)
+
+GAME_URL = "https://play2048.co/"
+HEADLESS = False
+BROWSER_WIDTH = 1280
+BROWSER_HEIGHT = 800
+
+FRAME_CAPTURE_INTERVAL = 0.5  # seconds between captures
+MAX_EPISODE_STEPS = 2000
+NUM_EPISODES = 10
+
+ANOMALY_THRESHOLD = 0.035       # autoencoder reconstruction MSE threshold
+ANOMALY_IMG_SIZE = (128, 128)
+AUTOENCODER_EPOCHS = 30
+AUTOENCODER_BATCH = 32
+
+DQN_LR = 1e-3
+DQN_GAMMA = 0.99
+DQN_EPSILON_START = 1.0
+DQN_EPSILON_END = 0.05
+DQN_EPSILON_DECAY = 0.995
+DQN_BATCH_SIZE = 64
+DQN_MEMORY_SIZE = 10_000
+DQN_TARGET_UPDATE = 20
+
+DASHBOARD_HOST = "127.0.0.1"
+DASHBOARD_PORT = 8765
